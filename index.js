@@ -298,6 +298,25 @@ app.get('/api/futures/ftsemib', async (req, res) => {
   }
 });
 
+// Rotta per dati storici di un indice/future
+app.get('/api/history/:symbol', async (req, res) => {
+  try {
+    const { symbol } = req.params;
+    // Recupera dati daily degli ultimi 6 mesi
+    const to = new Date();
+    const from = new Date();
+    from.setMonth(to.getMonth() - 6);
+    const result = await yahooFinance.historical(symbol, {
+      period1: from,
+      period2: to,
+      interval: '1d',
+    });
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'Errore nel recupero dati storici', details: error.message });
+  }
+});
+
 app.listen(3001, () => {
   console.log('Backend avviato su http://localhost:3001');
 });

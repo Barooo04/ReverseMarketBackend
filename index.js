@@ -400,7 +400,7 @@ app.get('/api/history/:symbol', async (req, res) => {
     const to = new Date();
     const from = new Date();
     from.setMonth(to.getMonth() - 6);
-    const result = await yahooFinance.historical(symbol, {
+    const result = await yahooFinance.chart(symbol, {
       period1: from,
       period2: to,
       interval: '1d',

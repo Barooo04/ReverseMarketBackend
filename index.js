@@ -396,18 +396,88 @@ app.get('/api/futures/ftsemib', async (req, res) => {
 app.get('/api/history/:symbol', async (req, res) => {
   try {
     const { symbol } = req.params;
+    console.log(`[DEBUG] Richiesta dati storici per ${symbol}`);
+    
     // Recupera dati daily degli ultimi 6 mesi
     const to = new Date();
     const from = new Date();
     from.setMonth(to.getMonth() - 6);
-    const result = await yahooFinance.chart(symbol, {
+    
+    console.log(`[DEBUG] Periodo richiesto: da ${from.toISOString()} a ${to.toISOString()}`);
+    
+    // Prova prima con il simbolo originale
+    let result = await yahooFinance.chart(symbol, {
       period1: from,
       period2: to,
       interval: '1d',
     });
-    res.json(result);
+    
+    // Se non ci sono dati, prova con il simbolo senza il prefisso ^
+    if (!result || !result.quotes || result.quotes.length === 0) {
+      console.log(`[DEBUG] Nessun dato trovato per ${symbol}, provo senza prefisso ^`);
+      const cleanSymbol = symbol.replace('^', '');
+      result = await yahooFinance.chart(cleanSymbol, {
+        period1: from,
+        period2: to,
+        interval: '1d',
+      });
+    }
+    
+    console.log(`[DEBUG] Risultato Yahoo Finance:`, result);
+    
+    if (!result || !result.quotes || !Array.isArray(result.quotes)) {
+      throw new Error('Formato dati non valido');
+    }
+    
+    // Trasforma i dati nel formato richiesto dal frontend
+    const formattedData = result.quotes
+      .filter(quote => quote && quote.date && quote.close)
+      .map(quote => ({
+        date: new Date(quote.date).toISOString().split('T')[0],
+        close: parseFloat(quote.close)
+      }))
+      .filter(d => !isNaN(d.close));
+    
+    console.log(`[DEBUG] Dati formattati:`, formattedData);
+    
+    if (formattedData.length === 0) {
+      // Se ancora non ci sono dati, prova con un periodo più breve
+      console.log(`[DEBUG] Nessun dato valido trovato, provo con periodo più breve`);
+      from.setMonth(to.getMonth() - 1); // Ultimo mese invece di 6 mesi
+      
+      result = await yahooFinance.chart(symbol, {
+        period1: from,
+        period2: to,
+        interval: '1d',
+      });
+      
+      if (!result || !result.quotes || !Array.isArray(result.quotes)) {
+        throw new Error('Formato dati non valido');
+      }
+      
+      const shortTermData = result.quotes
+        .filter(quote => quote && quote.date && quote.close)
+        .map(quote => ({
+          date: new Date(quote.date).toISOString().split('T')[0],
+          close: parseFloat(quote.close)
+        }))
+        .filter(d => !isNaN(d.close));
+      
+      if (shortTermData.length === 0) {
+        throw new Error('Nessun dato valido trovato');
+      }
+      
+      res.json(shortTermData);
+    } else {
+      res.json(formattedData);
+    }
   } catch (error) {
-    res.status(500).json({ error: 'Errore nel recupero dati storici', details: error.message });
+    console.error(`[ERROR] Errore nel recupero dati storici:`, error);
+    res.status(500).json({ 
+      error: 'Errore nel recupero dati storici', 
+      details: error.message,
+      symbol: req.params.symbol
+    });
   }
 });
 
